@@ -85,7 +85,7 @@ export async function submitScreening(
     const affectedCategories = new Set<string>();
 
     // Look up question metadata for each answer
-    for (const [questionId, response] of answers.entries()) {
+    for (const [questionId, response] of Array.from(answers.entries())) {
       const question = denverIIQuestions.find((q) => q.questionId === questionId);
 
       if (!question) {
