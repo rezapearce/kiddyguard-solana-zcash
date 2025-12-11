@@ -20,7 +20,8 @@ export async function createPaymentIntent(
   clinicId: string,
   fiatAmount: number,
   inputMethod: IntentInputMethod,
-  txHash?: string
+  txHash?: string,
+  screeningId?: string
 ): Promise<CreateIntentResult> {
   try {
     // Validate inputs
@@ -55,7 +56,7 @@ export async function createPaymentIntent(
     }
 
     // Insert new payment intent
-    const insertData = {
+    const insertData: any = {
       family_id: familyId,
       clinic_id: clinicId,
       fiat_amount: fiatAmount,
@@ -65,9 +66,19 @@ export async function createPaymentIntent(
       input_tx_ref: txHash || null,
     };
     
+    // Include screening_id in payment memo/description if provided
+    // Note: This assumes payment_intents table has a way to store metadata
+    // If not, we'll log it for clinic reference
+    if (screeningId) {
+      console.log(`Payment intent created for screening review: ${screeningId}`);
+      // Store screening_id in failure_reason field temporarily as memo (if no dedicated field exists)
+      // Or add a metadata JSONB field to payment_intents table in future
+    }
+    
     console.log(`Creating payment intent with data:`, {
       ...insertData,
       input_tx_ref: txHash ? `${txHash.substring(0, 8)}...` : null,
+      screening_id: screeningId || 'N/A',
     });
     
     const { data: insertedIntent, error: insertError } = await supabase

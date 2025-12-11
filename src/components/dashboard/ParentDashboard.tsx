@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { QrCode } from 'lucide-react';
+import { QrCode, Stethoscope } from 'lucide-react';
 import { useFamilyStore } from '@/store/useFamilyStore';
 import { signWithMPC } from '@/lib/zenrock/mpc';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,8 +14,10 @@ import { ScannerModal } from '@/components/dashboard/ScannerModal';
 import { UnifiedActivityList } from '@/components/dashboard/UnifiedActivityList';
 import { WalletFaucet } from '@/components/dashboard/WalletFaucet';
 import { WalletConnectButton } from '@/components/dashboard/WalletConnectButton';
+import { ScreeningHistory } from '@/components/screening/ScreeningHistory';
 
 export function ParentDashboard() {
+  const router = useRouter();
   const { wallet, transactions, approveTransaction, rejectTransaction, setUser, currentUser } = useFamilyStore();
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
   const [isScannerOpen, setIsScannerOpen] = useState(false);
@@ -142,6 +145,29 @@ export function ParentDashboard() {
           </Button>
         </div>
       </div>
+
+      {/* Screening Wizard Card */}
+      <Card className="border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Stethoscope className="h-5 w-5 text-blue-600" />
+            Pediatric Developmental Screening
+          </CardTitle>
+          <CardDescription>
+            Complete a simplified Denver II screening to assess your child's developmental milestones
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            onClick={() => router.push('/screening/wizard')}
+            size="lg"
+            className="w-full bg-blue-600 hover:bg-blue-700"
+          >
+            <Stethoscope className="mr-2 h-5 w-5" />
+            Start Screening Wizard
+          </Button>
+        </CardContent>
+      </Card>
 
       {/* Quick Actions Card */}
       <Card className="border-teal-200">
@@ -277,6 +303,11 @@ export function ParentDashboard() {
           )}
         </CardContent>
       </Card>
+
+      {/* Screening History */}
+      {currentUser?.familyId && (
+        <ScreeningHistory />
+      )}
 
       {/* Unified Transaction History */}
       {currentUser?.familyId && (

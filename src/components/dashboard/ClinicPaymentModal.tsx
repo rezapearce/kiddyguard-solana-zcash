@@ -38,9 +38,10 @@ const MOCK_CLINIC_ID = '00000000-0000-0000-0000-000000000001';
 interface ClinicPaymentModalProps {
   isOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
+  screeningId?: string;
 }
 
-export function ClinicPaymentModal({ isOpen: controlledIsOpen, onOpenChange }: ClinicPaymentModalProps = {} as ClinicPaymentModalProps) {
+export function ClinicPaymentModal({ isOpen: controlledIsOpen, onOpenChange, screeningId }: ClinicPaymentModalProps = {} as ClinicPaymentModalProps) {
   const { currentUser } = useFamilyStore();
   const wallet = useWallet();
   const { connection } = useConnection();
@@ -106,6 +107,14 @@ export function ClinicPaymentModal({ isOpen: controlledIsOpen, onOpenChange }: C
       }
     }
   }, [isOpen, pollingInterval]);
+
+  // Set default amount when screeningId is provided (screening review payment)
+  useEffect(() => {
+    if (isOpen && screeningId && !amount) {
+      // Set default payment amount for screening review (e.g., 50,000 IDR)
+      setAmount('50000');
+    }
+  }, [isOpen, screeningId, amount]);
 
   const startPolling = (intentIdToPoll: string) => {
     const interval = setInterval(async () => {
@@ -424,13 +433,19 @@ export function ClinicPaymentModal({ isOpen: controlledIsOpen, onOpenChange }: C
       }
 
       // Create payment intent (with txHash for SOL_WALLET, undefined for USDC_BALANCE)
+      // Include screening_id in payment context if provided
+      if (screeningId) {
+        console.log(`Creating payment intent for screening review: ${screeningId}`);
+      }
+      
       const result = await createPaymentIntent(
         currentUser.id,
         currentUser.familyId,
         MOCK_CLINIC_ID,
         amountNum,
         inputMethod,
-        txHash
+        txHash,
+        screeningId
       );
 
       if (!result.success || !result.intentId) {
@@ -468,7 +483,9 @@ export function ClinicPaymentModal({ isOpen: controlledIsOpen, onOpenChange }: C
         <DialogHeader>
           <DialogTitle>Pay Clinic</DialogTitle>
           <DialogDescription>
-            Make a payment to a clinic. The payment will be automatically routed and shielded.
+            {screeningId 
+              ? `Make a payment for screening review (ID: ${screeningId.substring(0, 8)}...). The payment will be automatically routed and shielded.`
+              : 'Make a payment to a clinic. The payment will be automatically routed and shielded.'}
           </DialogDescription>
         </DialogHeader>
 
