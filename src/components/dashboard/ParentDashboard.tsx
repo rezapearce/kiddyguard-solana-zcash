@@ -2,12 +2,14 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { QrCode } from 'lucide-react';
 import { useFamilyStore } from '@/store/useFamilyStore';
 import { signWithMPC } from '@/lib/zenrock/mpc';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ClinicPaymentModal } from '@/components/dashboard/ClinicPaymentModal';
+import { ScannerModal } from '@/components/dashboard/ScannerModal';
 import { UnifiedActivityList } from '@/components/dashboard/UnifiedActivityList';
 import { WalletFaucet } from '@/components/dashboard/WalletFaucet';
 import { WalletConnectButton } from '@/components/dashboard/WalletConnectButton';
@@ -15,6 +17,8 @@ import { WalletConnectButton } from '@/components/dashboard/WalletConnectButton'
 export function ParentDashboard() {
   const { wallet, transactions, approveTransaction, rejectTransaction, setUser, currentUser } = useFamilyStore();
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
 
   const totalFamilyValue = wallet.sol + wallet.usdc + wallet.zenzec;
   const pendingTransactions = transactions.filter((tx) => tx.status === 'pending');
@@ -67,18 +71,46 @@ export function ParentDashboard() {
     setUser(null);
   };
 
+  const handleScanSuccess = () => {
+    setIsPaymentModalOpen(true);
+  };
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">Parent Dashboard</h1>
         <div className="flex gap-2">
           <WalletConnectButton />
-          <ClinicPaymentModal />
+          <Button
+            onClick={() => setIsScannerOpen(true)}
+            variant="outline"
+            className="flex items-center gap-2"
+          >
+            <QrCode className="h-4 w-4" />
+            Scan
+          </Button>
+          <Button
+            onClick={() => setIsPaymentModalOpen(true)}
+            variant="default"
+          >
+            Pay Clinic
+          </Button>
           <Button onClick={handleLogout} variant="outline">
             Logout
           </Button>
         </div>
       </div>
+      
+      {/* Modals */}
+      <ScannerModal
+        isOpen={isScannerOpen}
+        onOpenChange={setIsScannerOpen}
+        onScanSuccess={handleScanSuccess}
+      />
+      <ClinicPaymentModal
+        isOpen={isPaymentModalOpen}
+        onOpenChange={setIsPaymentModalOpen}
+      />
       
       {/* Total Family Value */}
       <Card>

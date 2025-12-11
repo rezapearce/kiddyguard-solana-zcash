@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Lock, Shield, Loader2 } from 'lucide-react';
+import { QRCodeSVG } from 'react-qr-code';
 import { getClinicReceipts, ClinicReceipt } from '@/app/actions/getClinicData';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -125,6 +126,30 @@ export default function ClinicPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Receive Payment QR Code */}
+      <Card className="border-teal-200">
+        <CardHeader>
+          <CardTitle>Receive Payment</CardTitle>
+          <CardDescription>Share this QR code for patients to scan and pay</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col items-center justify-center py-6">
+            <div className="p-4 bg-white rounded-lg border-2 border-teal-200">
+              <QRCodeSVG
+                value="00000000-0000-0000-0000-000000000001"
+                size={200}
+                level="M"
+                fgColor="#0d9488"
+                bgColor="#ffffff"
+              />
+            </div>
+            <p className="mt-4 text-sm font-medium text-teal-700">
+              Scan to Pay Dr. Smith
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Transaction Table */}
       <Card className="border-teal-200">

@@ -15,7 +15,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,11 +35,20 @@ const STATUS_MESSAGES: Record<IntentStatus, string> = {
 
 const MOCK_CLINIC_ID = '00000000-0000-0000-0000-000000000001';
 
-export function ClinicPaymentModal() {
+interface ClinicPaymentModalProps {
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}
+
+export function ClinicPaymentModal({ isOpen: controlledIsOpen, onOpenChange }: ClinicPaymentModalProps = {} as ClinicPaymentModalProps) {
   const { currentUser } = useFamilyStore();
   const wallet = useWallet();
   const { connection } = useConnection();
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalIsOpen, setInternalIsOpen] = useState(false);
+  
+  // Use controlled state if provided, otherwise use internal state
+  const isOpen = controlledIsOpen !== undefined ? controlledIsOpen : internalIsOpen;
+  const setIsOpen = onOpenChange || setInternalIsOpen;
   const [amount, setAmount] = useState('');
   const [inputMethod, setInputMethod] = useState<IntentInputMethod | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -456,9 +464,6 @@ export function ClinicPaymentModal() {
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button>Pay Clinic</Button>
-      </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Pay Clinic</DialogTitle>
