@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Lock, Shield, Loader2, ExternalLink } from 'lucide-react';
+import { Lock, Shield, Loader2, ExternalLink, Stethoscope, ArrowRight } from 'lucide-react';
 import QRCode from 'react-qr-code';
 import { getClinicReceipts, ClinicReceipt } from '@/app/actions/getClinicData';
+import { getClinicScreenings } from '@/app/actions/getClinicScreenings';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -14,6 +15,7 @@ export default function ClinicPage() {
   const [receipts, setReceipts] = useState<ClinicReceipt[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pendingScreeningsCount, setPendingScreeningsCount] = useState<number>(0);
 
   useEffect(() => {
     const fetchReceipts = async () => {
@@ -35,7 +37,19 @@ export default function ClinicPage() {
       }
     };
 
+    const fetchPendingScreenings = async () => {
+      try {
+        const result = await getClinicScreenings();
+        if (result.success && result.data) {
+          setPendingScreeningsCount(result.data.length);
+        }
+      } catch (err) {
+        console.error('Failed to fetch pending screenings count:', err);
+      }
+    };
+
     fetchReceipts();
+    fetchPendingScreenings();
   }, []);
 
   const totalShieldedVolume = receipts.reduce((sum, receipt) => sum + receipt.amount, 0);
@@ -163,6 +177,39 @@ export default function ClinicPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Screening Queue Card */}
+      <Card className="border-teal-200 bg-teal-50/30">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Stethoscope className="h-5 w-5 text-teal-600" />
+            Screening Queue
+          </CardTitle>
+          <CardDescription>Review pending developmental screenings</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-3xl font-bold text-teal-600 mb-2">
+                {pendingScreeningsCount}
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {pendingScreeningsCount === 0
+                  ? 'No screenings pending review'
+                  : `${pendingScreeningsCount} screening(s) awaiting your review`}
+              </p>
+            </div>
+            <Button
+              onClick={() => router.push('/clinic/screenings')}
+              className="bg-teal-600 hover:bg-teal-700 text-white"
+              size="lg"
+            >
+              View Queue
+              <ArrowRight className="h-4 w-4 ml-2" />
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Receive Payment QR Code */}
       <Card className="border-teal-200">
