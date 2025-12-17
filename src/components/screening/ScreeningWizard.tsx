@@ -688,6 +688,13 @@ export function ScreeningWizard() {
         isOpen={isPaymentModalOpen}
         onOpenChange={setIsPaymentModalOpen}
         screeningId={screeningId || undefined}
+        onPaymentComplete={() => {
+          // Navigate back to dashboard after successful payment
+          toast.success('Payment completed! Redirecting to dashboard...');
+          setTimeout(() => {
+            router.push('/');
+          }, 1500);
+        }}
       />
     </div>
   );

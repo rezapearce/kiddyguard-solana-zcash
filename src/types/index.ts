@@ -43,6 +43,7 @@ export interface PaymentIntent {
   input_tx_ref?: string;
   mpc_sig?: string;
   failure_reason?: string;
+  network?: string; // Network identifier (e.g., 'solana-devnet', 'fiat')
   created_at: string;
   updated_at: string;
 }

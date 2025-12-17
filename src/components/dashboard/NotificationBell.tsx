@@ -123,9 +123,20 @@ export function NotificationBell({ userId }: NotificationBellProps) {
     console.log("🔔 [Frontend Debug] Unread count calculation:", {
       totalNotifications: notifications.length,
       unreadCount: unreadCount,
-      notifications: notifications.map(n => ({ id: n.id, is_read: n.is_read, title: n.title }))
+      willShowBadge: unreadCount > 0,
+      notifications: notifications.map(n => ({ id: n.id, is_read: n.is_read, title: n.title })),
+      filteredUnread: notifications.filter(n => !n.is_read)
     });
-  }, [notifications]);
+    console.log("🔔 [Frontend Debug] Badge should render:", unreadCount > 0, "unreadCount:", unreadCount);
+  }, [notifications, unreadCount]);
+  
+  // Debug: Log on every render
+  console.log("🔔 [Render Debug] NotificationBell render:", {
+    unreadCount,
+    notificationsLength: notifications.length,
+    willRenderBadge: unreadCount > 0,
+    notifications: notifications
+  });
 
   // Always render the bell if userId is provided (even if there are no notifications)
   if (!userId) {
@@ -147,7 +158,7 @@ export function NotificationBell({ userId }: NotificationBellProps) {
       className="relative inline-flex flex-shrink-0" 
       ref={dropdownRef} 
       data-testid="notification-bell"
-      style={{ minWidth: '40px', minHeight: '40px' }}
+      style={{ minWidth: '40px', minHeight: '40px', overflow: 'visible' }}
     >
       <Button
         variant="outline"
@@ -156,26 +167,57 @@ export function NotificationBell({ userId }: NotificationBellProps) {
           console.log('NotificationBell clicked, opening dropdown');
           setIsOpen(!isOpen);
         }}
-        className="relative h-10 w-10 border border-input bg-background hover:bg-accent hover:text-accent-foreground flex items-center justify-center"
+        className="relative h-10 w-10 border border-input bg-background hover:bg-accent hover:text-accent-foreground flex items-center justify-center overflow-visible"
         aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
         type="button"
         style={{ 
+          position: 'relative',
           minWidth: '40px', 
           minHeight: '40px',
           display: 'inline-flex',
           visibility: 'visible',
-          opacity: 1
+          opacity: 1,
+          overflow: 'visible'
         }}
       >
         <Bell className="h-5 w-5 text-foreground flex-shrink-0" style={{ display: 'block' }} />
         {unreadCount > 0 && (
           <span 
-            className="absolute -top-1 -right-1 h-5 w-5 min-w-[1.25rem] rounded-full bg-red-500 flex items-center justify-center text-xs text-white font-bold border-2 border-background z-10 pointer-events-none"
+            className="notification-badge absolute rounded-full bg-red-500 flex items-center justify-center text-xs text-white font-bold border-2 border-background pointer-events-none"
             aria-label={`${unreadCount} unread notifications`}
+            role="status"
+            style={{ 
+              position: 'absolute',
+              top: '-6px',
+              right: '-6px',
+              width: '20px',
+              height: '20px',
+              minWidth: '20px',
+              backgroundColor: '#ef4444',
+              zIndex: 9999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '2px solid white',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+              visibility: 'visible',
+              opacity: 1
+            }}
+            data-debug="red-dot-badge"
+            data-unread-count={unreadCount}
+            data-testid="notification-badge"
+            id="notification-badge-indicator"
           >
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
+        {/* Debug log - always runs */}
+        {console.log('🔴 [Badge Render Check]', { 
+          unreadCount, 
+          shouldRender: unreadCount > 0, 
+          notificationsCount: notifications.length,
+          timestamp: new Date().toISOString()
+        })}
       </Button>
 
       {isOpen && (

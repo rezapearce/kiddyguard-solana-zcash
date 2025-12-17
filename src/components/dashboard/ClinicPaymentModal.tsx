@@ -5,9 +5,8 @@ import { toast } from 'sonner';
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import { Transaction, SystemProgram, LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
 import { useFamilyStore } from '@/store/useFamilyStore';
-import { createPaymentIntent } from '@/app/actions/createIntent';
+import { createPaymentIntent, getPaymentIntentStatus } from '@/app/actions/createIntent';
 import { IntentInputMethod, IntentStatus } from '@/types';
-import { supabase } from '@/lib/supabase';
 import {
   Dialog,
   DialogContent,
@@ -39,9 +38,10 @@ interface ClinicPaymentModalProps {
   isOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
   screeningId?: string;
+  onPaymentComplete?: () => void;
 }
 
-export function ClinicPaymentModal({ isOpen: controlledIsOpen, onOpenChange, screeningId }: ClinicPaymentModalProps = {} as ClinicPaymentModalProps) {
+export function ClinicPaymentModal({ isOpen: controlledIsOpen, onOpenChange, screeningId, onPaymentComplete }: ClinicPaymentModalProps = {} as ClinicPaymentModalProps) {
   const { currentUser } = useFamilyStore();
   const wallet = useWallet();
   const { connection } = useConnection();
@@ -119,19 +119,15 @@ export function ClinicPaymentModal({ isOpen: controlledIsOpen, onOpenChange, scr
   const startPolling = (intentIdToPoll: string) => {
     const interval = setInterval(async () => {
       try {
-        const { data, error } = await supabase
-          .from('payment_intents')
-          .select('status, failure_reason')
-          .eq('intent_id', intentIdToPoll)
-          .single();
+        const result = await getPaymentIntentStatus(intentIdToPoll);
 
-        if (error) {
-          console.error('Error polling intent status:', error);
+        if (!result.success) {
+          console.error('Error polling intent status:', result.error);
           return;
         }
 
-        if (data) {
-          const status = data.status as IntentStatus;
+        if (result.status) {
+          const status = result.status;
           setCurrentStatus(status);
 
           // Stop polling if settled or failed
@@ -149,12 +145,20 @@ export function ClinicPaymentModal({ isOpen: controlledIsOpen, onOpenChange, scr
               }
               // Trigger refresh of UnifiedActivityList
               window.dispatchEvent(new Event('payment-complete'));
+              
+              // Call payment complete callback if provided
+              if (onPaymentComplete) {
+                setTimeout(() => {
+                  onPaymentComplete();
+                }, 1000);
+              }
+              
               setTimeout(() => {
                 setIsOpen(false);
               }, 1500);
             } else {
-              const errorMessage = data.failure_reason 
-                ? `Payment failed: ${data.failure_reason}`
+              const errorMessage = result.failureReason 
+                ? `Payment failed: ${result.failureReason}`
                 : 'Payment failed. Please try again.';
               toast.error(errorMessage);
             }

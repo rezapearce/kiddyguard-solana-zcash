@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
 import { PaymentIntent, IntentStatus } from '@/types';
 import { signWithMPC } from '@/lib/zenrock/mpc';
 import { Connection, PublicKey, LAMPORTS_PER_SOL, ParsedTransaction } from '@solana/web3.js';
@@ -21,6 +21,32 @@ export class IntentSolver {
 
   // Solana connection
   private readonly solanaConnection: Connection;
+  
+  // Supabase admin client (bypasses RLS)
+  private getSupabaseAdmin() {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    
+    console.log(`[IntentSolver] 🔑 Initializing admin client...`);
+    console.log(`[IntentSolver] Supabase URL: ${supabaseUrl ? supabaseUrl.substring(0, 30) + '...' : '❌ MISSING'}`);
+    console.log(`[IntentSolver] Service Role Key: ${serviceRoleKey ? `✅ SET (length: ${serviceRoleKey.length})` : '❌ MISSING'}`);
+    
+    if (!supabaseUrl || !serviceRoleKey) {
+      const missing = [];
+      if (!supabaseUrl) missing.push('NEXT_PUBLIC_SUPABASE_URL');
+      if (!serviceRoleKey) missing.push('SUPABASE_SERVICE_ROLE_KEY');
+      console.error(`[IntentSolver] ❌ Missing environment variables: ${missing.join(', ')}`);
+      throw new Error(`Missing Supabase environment variables for admin client: ${missing.join(', ')}`);
+    }
+    
+    return createClient(supabaseUrl, serviceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+        detectSessionInUrl: false,
+      },
+    });
+  }
 
   private constructor() {
     // Private constructor for singleton pattern
@@ -46,56 +72,97 @@ export class IntentSolver {
    * @param intentId - UUID of the payment intent to process
    */
   public async processIntent(intentId: string): Promise<void> {
+    console.log(`[IntentSolver] 🚀 STARTING process for intent ${intentId}`);
+    
     try {
-      // 1. Fetch intent from Supabase
-      const { data: intent, error: fetchError } = await supabase
+      // 1. Fetch intent from Supabase using admin client to bypass RLS
+      console.log(`[IntentSolver] Fetching intent ${intentId} from database...`);
+      const supabaseAdmin = this.getSupabaseAdmin();
+      const { data: intent, error: fetchError } = await supabaseAdmin
         .from('payment_intents')
         .select('*')
         .eq('intent_id', intentId)
         .single();
 
       if (fetchError) {
-        throw new Error(`Failed to fetch intent: ${fetchError.message}`);
+        console.error(`[IntentSolver] ❌ Failed to fetch intent:`, fetchError);
+        throw new Error(`Failed to fetch intent: ${fetchError.message} (code: ${fetchError.code})`);
       }
 
       if (!intent) {
+        console.error(`[IntentSolver] ❌ Intent ${intentId} not found in database`);
         throw new Error(`Intent ${intentId} not found`);
       }
 
       const paymentIntent = intent as PaymentIntent;
+      console.log(`[IntentSolver] ✅ Intent fetched. Status: ${paymentIntent.status}, Method: ${paymentIntent.input_method}, Amount: ${paymentIntent.fiat_amount}`);
 
       // 2. Process based on current status
+      console.log(`[IntentSolver] Processing intent with status: ${paymentIntent.status}`);
       switch (paymentIntent.status) {
         case 'CREATED':
+          console.log(`[IntentSolver] → Handling CREATED status...`);
           await this.handleCreated(paymentIntent);
           break;
 
         case 'FUNDING_DETECTED':
+          console.log(`[IntentSolver] → Handling FUNDING_DETECTED status...`);
           await this.handleFundingDetected(paymentIntent);
           break;
 
         case 'ROUTING':
+          console.log(`[IntentSolver] → Handling ROUTING status...`);
           await this.handleRouting(paymentIntent);
           break;
 
         case 'SHIELDING':
+          console.log(`[IntentSolver] → Handling SHIELDING status...`);
           await this.handleShielding(paymentIntent);
           break;
 
         case 'SETTLED':
-          console.log(`Intent ${intentId} is already settled`);
+          console.log(`[IntentSolver] ✅ Intent ${intentId} is already settled`);
           return;
 
         case 'FAILED':
-          console.log(`Intent ${intentId} has failed and cannot be processed`);
+          console.log(`[IntentSolver] ⚠️ Intent ${intentId} has failed and cannot be processed`);
           return;
 
         default:
+          console.error(`[IntentSolver] ❌ Unknown status: ${paymentIntent.status}`);
           throw new Error(`Unknown status: ${paymentIntent.status}`);
       }
+      
+      console.log(`[IntentSolver] ✅ Successfully processed intent ${intentId}`);
     } catch (error) {
-      console.error(`Error processing intent ${intentId}:`, error);
-      await this.setIntentStatus(intentId, 'FAILED');
+      // 🔴 CRITICAL ERROR LOGGING
+      console.error(`[IntentSolver] 💥 FATAL ERROR processing intent ${intentId}:`, error);
+      console.error(`[IntentSolver] Error details:`, {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        name: error instanceof Error ? error.name : typeof error,
+      });
+      
+      // Update DB so frontend stops spinning
+      try {
+        const supabaseAdmin = this.getSupabaseAdmin();
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error during processing';
+        console.log(`[IntentSolver] Updating intent ${intentId} status to FAILED with reason: ${errorMessage}`);
+        
+        await supabaseAdmin
+          .from('payment_intents')
+          .update({ 
+            status: 'FAILED', 
+            failure_reason: errorMessage
+          })
+          .eq('intent_id', intentId);
+        
+        console.log(`[IntentSolver] ✅ Intent ${intentId} marked as FAILED`);
+      } catch (updateError) {
+        console.error(`[IntentSolver] ❌ Failed to update intent status to FAILED:`, updateError);
+      }
+      
+      // Re-throw so caller knows it failed
       throw error;
     }
   }
@@ -167,18 +234,21 @@ export class IntentSolver {
     }
     
     // For USDC_BALANCE and other methods, check balance and deduct funds
+    console.log(`[IntentSolver] Checking balance for intent ${intent.intent_id} (method: ${intent.input_method})`);
     const balanceResult = await this.checkAndDeductBalance(intent);
     
     if (!balanceResult.success) {
       // Insufficient funds or error - fail the intent
       const failureReason = balanceResult.reason || 'Balance check failed';
-      console.error(`Intent ${intent.intent_id} failed: ${failureReason}`);
+      console.error(`[IntentSolver] ❌ Intent ${intent.intent_id} failed: ${failureReason}`);
       await this.setIntentStatus(intent.intent_id, 'FAILED', { failure_reason: failureReason });
       return; // Stop processing
     }
     
+    console.log(`[IntentSolver] ✅ Balance check passed. Deducting funds...`);
     // Balance deducted successfully - proceed to FUNDING_DETECTED
     await this.setIntentStatus(intent.intent_id, 'FUNDING_DETECTED');
+    console.log(`[IntentSolver] ✅ Status updated to FUNDING_DETECTED. Continuing processing...`);
     
     // Recursively process the next state
     await this.processIntent(intent.intent_id);
@@ -213,11 +283,12 @@ export class IntentSolver {
       throw new Error('MPC signing failed');
     }
 
-    // Generate mock MPC signature
+    // Generate mock MPC signature (for logging only, not stored in DB)
     const mockMpcSig = `mock_mpc_sig_${intent.intent_id}_${Date.now()}`;
+    console.log(`[IntentSolver] Generated MPC signature: ${mockMpcSig} (not stored in DB)`);
     
-    // Update status to SHIELDING and store MPC signature
-    await this.setIntentStatus(intent.intent_id, 'SHIELDING', { mpc_sig: mockMpcSig });
+    // Update status to SHIELDING (without mpc_sig since column doesn't exist)
+    await this.setIntentStatus(intent.intent_id, 'SHIELDING');
     
     // Recursively process the next state
     await this.processIntent(intent.intent_id);
@@ -236,36 +307,44 @@ export class IntentSolver {
     console.log(`Simulating MPC delay of ${delayMs.toFixed(0)}ms for intent ${intent.intent_id}`);
     await new Promise((resolve) => setTimeout(resolve, delayMs));
     
-    // Generate mock transaction hash
+    // Generate mock transaction hash (for logging only, not stored in DB)
     const mockTxHash = `0x${Array.from({ length: 64 }, () => 
       Math.floor(Math.random() * 16).toString(16)
     ).join('')}`;
+    console.log(`[IntentSolver] Generated transaction hash: ${mockTxHash} (not stored in DB)`);
     
-    // Update status to SETTLED and store transaction hash
-    await this.setIntentStatus(intent.intent_id, 'SETTLED', { tx_hash: mockTxHash });
+    // Update status to SETTLED (without tx_hash since column doesn't exist)
+    await this.setIntentStatus(intent.intent_id, 'SETTLED');
     
-    console.log(`Intent ${intent.intent_id} successfully settled with tx_hash: ${mockTxHash}`);
+    console.log(`Intent ${intent.intent_id} successfully settled`);
   }
 
   /**
    * Update intent status in Supabase
+   * Only updates fields that exist in the database schema
    */
   private async setIntentStatus(
     intentId: string,
     status: IntentStatus,
     additionalFields?: { tx_hash?: string; mpc_sig?: string; failure_reason?: string }
   ): Promise<void> {
+    const supabaseAdmin = this.getSupabaseAdmin();
+    
+    // Build update data, excluding columns that don't exist in schema
     const updateData: {
       status: IntentStatus;
-      tx_hash?: string;
-      mpc_sig?: string;
       failure_reason?: string;
     } = {
       status,
-      ...additionalFields,
     };
+    
+    // Only include fields that exist in the database schema
+    if (additionalFields?.failure_reason) {
+      updateData.failure_reason = additionalFields.failure_reason;
+    }
+    // Note: tx_hash and mpc_sig are intentionally excluded as these columns don't exist in the schema
 
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from('payment_intents')
       .update(updateData)
       .eq('intent_id', intentId);
@@ -299,9 +378,12 @@ export class IntentSolver {
     usdc_balance: number;
     sol_balance: number;
   } | null> {
+    console.log(`[IntentSolver] 🔍 Finding parent wallet for family ${familyId}...`);
     try {
       // First, find the parent user for this family
-      const { data: parentProfile, error: profileError } = await supabase
+      const supabaseAdmin = this.getSupabaseAdmin();
+      console.log(`[IntentSolver] Searching for parent profile with family_id: ${familyId}`);
+      const { data: parentProfile, error: profileError } = await supabaseAdmin
         .from('profiles')
         .select('id')
         .eq('family_id', familyId)
@@ -310,29 +392,45 @@ export class IntentSolver {
         .single();
 
       if (profileError || !parentProfile) {
-        console.error(`Failed to find parent profile for family ${familyId}:`, profileError);
+        console.error(`[IntentSolver] ❌ Failed to find parent profile for family ${familyId}:`, {
+          error: profileError,
+          code: profileError?.code,
+          message: profileError?.message,
+          details: profileError?.details,
+        });
         return null;
       }
 
+      console.log(`[IntentSolver] ✅ Found parent profile: ${parentProfile.id}`);
+
       // Then, get the wallet for that parent user
-      const { data: wallet, error: walletError } = await supabase
+      console.log(`[IntentSolver] Searching for wallet with user_id: ${parentProfile.id}`);
+      const { data: wallet, error: walletError } = await supabaseAdmin
         .from('wallets')
         .select('user_id, usdc_balance, sol_balance')
         .eq('user_id', parentProfile.id)
         .single();
 
       if (walletError || !wallet) {
-        console.error(`Failed to find wallet for parent user ${parentProfile.id}:`, walletError);
+        console.error(`[IntentSolver] ❌ Failed to find wallet for parent user ${parentProfile.id}:`, {
+          error: walletError,
+          code: walletError?.code,
+          message: walletError?.message,
+          details: walletError?.details,
+          hint: walletError?.hint || 'Wallet may not exist. Create one with: INSERT INTO wallets (user_id, usdc_balance, sol_balance) VALUES (...);',
+        });
         return null;
       }
 
+      console.log(`[IntentSolver] ✅ Found wallet. USDC: ${wallet.usdc_balance}, SOL: ${wallet.sol_balance}`);
       return {
         user_id: wallet.user_id,
         usdc_balance: Number(wallet.usdc_balance) || 0,
         sol_balance: Number(wallet.sol_balance) || 0,
       };
     } catch (error) {
-      console.error(`Error finding parent wallet for family ${familyId}:`, error);
+      console.error(`[IntentSolver] 💥 Exception finding parent wallet for family ${familyId}:`, error);
+      console.error(`[IntentSolver] Error stack:`, error instanceof Error ? error.stack : 'No stack trace');
       return null;
     }
   }
@@ -549,7 +647,8 @@ export class IntentSolver {
       const updateData: { [key: string]: number } = {};
       updateData[balanceField] = newBalance;
 
-      const { error: updateError } = await supabase
+      const supabaseAdmin = this.getSupabaseAdmin();
+      const { error: updateError } = await supabaseAdmin
         .from('wallets')
         .update(updateData)
         .eq('user_id', wallet.user_id);

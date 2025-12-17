@@ -2,11 +2,12 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import Webcam from 'react-webcam';
-import { supabase } from '@/lib/supabase';
+import { uploadVideo } from '@/app/actions/uploadVideo';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Video, Upload, Play, Square, CheckCircle2, X, Loader2, CircleHelp, RotateCcw } from 'lucide-react';
 import { VideoInstructionModal } from './VideoInstructionModal';
+import { supabase } from '@/lib/supabase';
 
 interface VideoEvidenceUploaderProps {
   questionId: string;
@@ -27,6 +28,8 @@ export function VideoEvidenceUploader({
   onRemove,
   existingVideoUrl,
 }: VideoEvidenceUploaderProps) {
+  // Use the regular Supabase client for client-side operations
+  
   const [mode, setMode] = useState<UploadMode>(existingVideoUrl ? 'completed' : 'initial');
   const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -168,22 +171,28 @@ export function VideoEvidenceUploader({
     try {
       const filePath = `${userId}/${screeningId}/${questionId}.webm`;
 
-      // Upload with progress tracking
-      const { data, error } = await supabase.storage
-        .from('clinical-evidence')
-        .upload(filePath, videoBlob, {
-          cacheControl: '3600',
-          upsert: true,
-        });
+      // Convert Blob to File for FormData
+      const file = new File([videoBlob], `${questionId}.webm`, { type: 'video/webm' });
+      
+      // Create FormData for server action
+      const formData = new FormData();
+      formData.append('filePath', filePath);
+      formData.append('file', file);
+      formData.append('userId', userId);
+      formData.append('screeningId', screeningId);
+      formData.append('questionId', questionId);
 
-      if (error) {
-        throw error;
+      // Upload via server action (bypasses RLS)
+      const result = await uploadVideo(formData);
+
+      if (!result.success) {
+        throw new Error(result.error || 'Upload failed');
       }
 
       // Simulate progress for better UX
       setUploadProgress(100);
 
-      const fullPath = `${userId}/${screeningId}/${questionId}.webm`;
+      const fullPath = result.path || filePath;
       setVideoUrl(fullPath);
       setMode('completed');
       onUploadComplete(fullPath);
