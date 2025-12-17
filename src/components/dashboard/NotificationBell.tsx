@@ -211,13 +211,6 @@ export function NotificationBell({ userId }: NotificationBellProps) {
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
-        {/* Debug log - always runs */}
-        {console.log('🔴 [Badge Render Check]', { 
-          unreadCount, 
-          shouldRender: unreadCount > 0, 
-          notificationsCount: notifications.length,
-          timestamp: new Date().toISOString()
-        })}
       </Button>
 
       {isOpen && (

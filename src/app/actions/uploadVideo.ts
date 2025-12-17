@@ -84,9 +84,12 @@ export async function uploadVideo(formData: FormData): Promise<UploadVideoResult
 
     if (error) {
       console.error('[video-upload] storage error:', JSON.stringify(error, null, 2));
-      console.error('[video-upload] error code:', error.statusCode);
       console.error('[video-upload] error message:', error.message);
       console.error('[video-upload] error name:', error.name);
+      // Check if statusCode exists before accessing it
+      if ('statusCode' in error) {
+        console.error('[video-upload] error code:', (error as any).statusCode);
+      }
       console.error('[video-upload] service role available:', !!supabaseServer);
       console.error('[video-upload] environment check:', {
         hasServiceKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
