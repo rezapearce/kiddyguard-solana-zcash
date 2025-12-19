@@ -152,7 +152,7 @@ export function generateProfessionalPDF(data: ReportData): jsPDF {
   });
 
   // KiddyGuard Indigo color: #4F46E5 (RGB: 79, 70, 229)
-  const indigoColor = [79, 70, 229];
+  const indigoColor: [number, number, number] = [79, 70, 229];
 
   // 1. Header & Branding
   doc.setFillColor(indigoColor[0], indigoColor[1], indigoColor[2]);

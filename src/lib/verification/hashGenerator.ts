@@ -4,6 +4,8 @@
  * payments to medical results without exposing payer identity
  */
 
+import * as crypto from 'crypto';
+
 export interface ClinicalReviewHashData {
   screeningId: string;
   reviewId: string;
@@ -39,19 +41,8 @@ export async function generateClinicalReviewHash(
     reviewedAt: data.reviewedAt,
   });
 
-  // Generate SHA-256 hash
-  if (typeof window !== 'undefined') {
-    // Browser environment - use Web Crypto API
-    const encoder = new TextEncoder();
-    const dataBuffer = encoder.encode(hashString);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
-  } else {
-    // Node.js environment - use crypto module
-    const crypto = require('crypto');
-    return crypto.createHash('sha256').update(hashString).digest('hex');
-  }
+  // Use Node.js crypto module (server-side only)
+  return crypto.createHash('sha256').update(hashString).digest('hex');
 }
 
 /**
@@ -68,4 +59,3 @@ export async function verifyClinicalReviewHash(
   const generatedHash = await generateClinicalReviewHash(data);
   return generatedHash === hash;
 }
-
