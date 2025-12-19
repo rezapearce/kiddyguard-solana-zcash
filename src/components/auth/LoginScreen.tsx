@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { useFamilyStore } from '@/store/useFamilyStore';
@@ -180,6 +181,7 @@ async function createUserProfile(
 }
 
 export function LoginScreen() {
+  const router = useRouter();
   const { publicKey } = useWallet();
   const { currentUser, setUser, fetchFamilyData } = useFamilyStore();
   const [isLoading, setIsLoading] = useState(false);
@@ -257,6 +259,25 @@ export function LoginScreen() {
       }
     } catch (error) {
       console.error('Error logging in as child:', error);
+      toast.error('Failed to login');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLoginAsPediatrician = async () => {
+    setIsLoading(true);
+    try {
+      const user = await fetchUserByUsername('Dr. Smith');
+      if (user) {
+        setUser(user);
+        // Pediatricians don't need family data
+        toast.success('Logged in as pediatrician');
+        // Redirect to clinic dashboard
+        router.push('/clinic');
+      }
+    } catch (error) {
+      console.error('Error logging in as pediatrician:', error);
       toast.error('Failed to login');
     } finally {
       setIsLoading(false);
@@ -348,8 +369,17 @@ export function LoginScreen() {
             >
               {isLoading ? 'Loading...' : 'Login as Child (Demo)'}
             </Button>
+            <Button
+              onClick={handleLoginAsPediatrician}
+              className="w-full h-20 text-lg"
+              size="lg"
+              variant="outline"
+              disabled={isLoading}
+            >
+              {isLoading ? 'Loading...' : 'Login as Pediatrician (Demo)'}
+            </Button>
             <p className="text-sm text-muted-foreground text-center mt-4">
-              Development mode: Hardcoded login (username: "Daddy Cool" / "Timmy Turner")
+              Development mode: Hardcoded login (username: "Daddy Cool" / "Timmy Turner" / "Dr. Smith")
             </p>
           </CardContent>
         </Card>
