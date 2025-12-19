@@ -34,7 +34,7 @@ export function DiscrepancyAlert({ discrepancies, threshold = 20 }: DiscrepancyA
                 </h4>
               </div>
               <p className="text-xs text-red-700 mb-3">
-                Significant differences (>20 points) between AI and clinical assessment detected.
+                Significant differences (&gt;20 points) between AI and clinical assessment detected.
                 Please review these domains carefully.
               </p>
               <div className="space-y-2">
